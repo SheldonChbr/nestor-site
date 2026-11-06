@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <!-- Logo publié en clair à côté de cette page (scripts/publier.ps1) : il
+         doit être là dès le premier affichage pour les favoris et les onglets. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>NESTOR</title>
+    <!--
+        Page publique du site NESTOR (dépôt GitHub « nestor-site », publié par
+        scripts/publier.ps1). L'application elle-même est dans le paquet chiffré
+        (AES-256-CBC + HMAC-SHA256). La clé est dans le lien d'accès, après le
+        « # » : cette partie n'est jamais envoyée au serveur. Une fois le paquet
+        ouvert, la clé est gardée dans ce navigateur et retirée de la barre
+        d'adresse ; les rechargements suivants n'en ont plus besoin.
+    -->
+    <style>
+        :root {
+            --fond: #0f172a;
+            --texte: #e2e8f0;
+            --texte-doux: #94a3b8;
+        }
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            background: var(--fond);
+            color: var(--texte);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .boite {
+            max-width: 440px;
+            text-align: center;
+        }
+        .boite h1 {
+            margin: 0 0 12px;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 4px;
+        }
+        .boite p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--texte-doux);
+        }
+    </style>
+</head>
+<body>
+    <div class="boite">
+        <h1>NESTOR</h1>
+        <p id="message" role="status" aria-live="polite">Chargement…</p>
+    </div>
+    <script>
+    (function () {
+        'use strict';
+
+        var CLE_STOCKEE = 'nestor_site_cle';
+
+        function message(texte) {
+            document.getElementById('message').textContent = texte;
+        }
+
+        function lireStockage() {
+            try { return localStorage.getItem(CLE_STOCKEE); } catch (e) { return null; }
+        }
+
+        function ecrireStockage(valeur) {
+            try {
+                if (valeur) localStorage.setItem(CLE_STOCKEE, valeur);
+                else localStorage.removeItem(CLE_STOCKEE);
+            } catch (e) { /* stockage indisponible : le lien complet restera nécessaire */ }
+        }
+
+        function base64urlVersOctets(s) {
+            s = s.replace(/-/g, '+').replace(/_/g, '/');
+            while (s.length % 4) s += '=';
+            var binaire = atob(s);
+            var octets = new Uint8Array(binaire.length);
+            for (var i = 0; i < binaire.length; i++) octets[i] = binaire.charCodeAt(i);
+            return octets;
+        }
+
+        // Ouvre le paquet : vérifie l'empreinte (HMAC) puis déchiffre et
+        // décompresse. Renvoie null si la clé ne correspond pas.
+        async function ouvrirPaquet(donnees, cle) {
+            var subtle = window.crypto.subtle;
+            var encodeur = new TextEncoder();
+            var maitre = await subtle.importKey('raw', base64urlVersOctets(cle), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+            var cleAes = await subtle.importKey('raw', await subtle.sign('HMAC', maitre, encodeur.encode('chiffrement')), { name: 'AES-CBC' }, false, ['decrypt']);
+            var cleMac = await subtle.importKey('raw', await subtle.sign('HMAC', maitre, encodeur.encode('authentification')), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+
+            var fin = donnees.length - 32;
+            var valide = await subtle.verify('HMAC', cleMac, donnees.slice(fin), donnees.slice(0, fin));
+            if (!valide) return null;
+
+            var clair = await subtle.decrypt({ name: 'AES-CBC', iv: donnees.slice(0, 16) }, cleAes, donnees.slice(16, fin));
+            var flux = new Blob([clair]).stream().pipeThrough(new DecompressionStream('gzip'));
+            return JSON.parse(await new Response(flux).text());
+        }
+
+        // Reconstitue la page de NESTOR à partir des fichiers du paquet : feuilles
+        // de style et scripts insérés tels quels, référentiel NATINF fourni d'avance.
+        // Les icônes (favicon.svg / .ico) restent des liens vers les fichiers
+        // publiés à côté de cette page.
+        function lancer(paquet) {
+            var fichiers = paquet.fichiers;
+            window.__NatinfCatalogRecords = paquet.catalogue;
+            // La fenêtre est conservée par document.open() : ne pas laisser
+            // l'écouteur de la page d'accueil actif dans NESTOR.
+            window.removeEventListener('hashchange', surChangementLien);
+
+            var html = fichiers['index.html']
+                .replace(/<link rel="stylesheet" href="([^"]+)">/g, function (balise, chemin) {
+                    return '<style>' + fichiers[chemin] + '</style>';
+                })
+                .replace(/<script src="([^"]+)" defer><\/script>/g, function (balise, chemin) {
+                    return '<script>' + fichiers[chemin].replace(/<\/script/gi, '<\\/script') + '<\/script>';
+                });
+
+            document.open();
+            document.write(html);
+            document.close();
+        }
+
+        async function demarrer() {
+            var dansLien = /(?:^#|&)cle=([A-Za-z0-9_-]{43})(?:&|$)/.exec(location.hash);
+            var cle = dansLien ? dansLien[1] : lireStockage();
+            if (!cle) {
+                message("Lien incomplet. Utilisez le lien d'accès complet qui vous a été transmis.");
+                return;
+            }
+            if (!window.crypto || !window.crypto.subtle || typeof DecompressionStream === 'undefined') {
+                message('Navigateur trop ancien : utilisez Edge, Chrome ou Firefox à jour.');
+                return;
+            }
+
+            var version = await (await fetch('version.json', { cache: 'no-store' })).json();
+            var reponse = await fetch(version.paquet);
+            if (!reponse.ok) throw new Error('paquet introuvable');
+            var donnees = new Uint8Array(await reponse.arrayBuffer());
+
+            var paquet = await ouvrirPaquet(donnees, cle);
+            if (!paquet) {
+                ecrireStockage(null);
+                message("Ce lien n'est plus valable. Demandez le nouveau lien d'accès.");
+                return;
+            }
+
+            ecrireStockage(cle);
+            if (dansLien) history.replaceState(null, '', location.pathname + location.search);
+            lancer(paquet);
+        }
+
+        // Lien collé dans un onglet déjà ouvert sur cette page : seule la
+        // partie après « # » change, sans rechargement. On repart de zéro.
+        function surChangementLien() { location.reload(); }
+        window.addEventListener('hashchange', surChangementLien);
+
+        demarrer().catch(function (erreur) {
+            message('Impossible de charger NESTOR (' + erreur.message + '). Vérifiez la connexion puis rechargez la page.');
+        });
+    })();
+    </script>
+</body>
+</html>
