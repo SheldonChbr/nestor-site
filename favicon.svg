@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" role="img" aria-label="NESTOR">
+  <defs>
+    <linearGradient id="argent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".5" stop-color="#eef2f6"/>
+      <stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="6.5" fill="#0f172a"/>
+  <rect x=".75" y=".75" width="30.5" height="30.5" rx="5.75" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+  <path fill="url(#argent)" d="M6 26V6h5.6l8.8 13.4V6H26v20h-5.6L11.6 12.6V26z"/>
+</svg>

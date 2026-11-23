@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <!-- Barrière du navigateur (audit du 23/11/2026) : la page ne peut charger
+         que des fichiers du site, et ne peut contacter que le site et les deux
+         services d'adresses de l'État (recherche en ligne). Tout autre envoi
+         est bloqué par le navigateur. Recopiée dans la page de NESTOR une fois
+         le paquet ouvert (lancer), et dans les pages annexes. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://geo.api.gouv.fr https://api-adresse.data.gouv.fr; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <!-- Logo publié en clair à côté de cette page (scripts/publier.ps1) : il
+         doit être là dès le premier affichage pour les favoris et les onglets. -->
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <title>NESTOR</title>
+    <!--
+        Page publique du site NESTOR (dépôt GitHub « nestor-site », publié par
+        scripts/publier.ps1). L'application elle-même est dans le paquet chiffré
+        (AES-256-CBC + HMAC-SHA256). La clé est dans le lien d'accès, après le
+        « # » : cette partie n'est jamais envoyée au serveur. Une fois le paquet
+        ouvert, la clé est gardée dans ce navigateur et retirée de la barre
+        d'adresse ; les rechargements suivants n'en ont plus besoin.
+    -->
+    <style>
+        :root {
+            --fond: #0f172a;
+            --texte: #e2e8f0;
+            --texte-doux: #94a3b8;
+        }
+        html, body {
+            margin: 0;
+            min-height: 100%;
+            background: var(--fond);
+            color: var(--texte);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+        .boite {
+            max-width: 440px;
+            text-align: center;
+        }
+        .boite h1 {
+            margin: 0 0 12px;
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 4px;
+        }
+        .boite p {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--texte-doux);
+        }
+
+        /* Page ouverte sans clé (validé le 16/11/2026) : fausse barre de
+           déchiffrement, puis un berger australien qui dort sur le cadenas, la
+           clé dans la gueule. La vraie consigne reste écrite en dessous. */
+        .troll[hidden], .dechiffrement[hidden], .chien[hidden] { display: none; }
+        .dechiffrement { margin: 8px auto 18px; width: min(320px, 80vw); }
+        .dechiffrement p { font-family: Consolas, 'DejaVu Sans Mono', monospace; color: #86efac; min-height: 1.5em; }
+        .dechiffrement .fini { color: var(--texte); font-family: inherit; font-size: 18px; font-weight: 700; }
+        .barre { height: 10px; margin-top: 8px; border-radius: 5px; background: #1e293b; overflow: hidden; }
+        .barre-plein { height: 100%; width: 0; border-radius: 5px; background: linear-gradient(90deg, #22c55e, #86efac); transition: width 0.8s ease-out; }
+        .chien { display: block; width: min(330px, 84vw); height: auto; margin: 0 auto 12px; cursor: pointer; outline: none; animation: chien-arrive 0.6s ease-out; }
+        .chien:focus-visible { filter: drop-shadow(0 0 6px #93c5fd); }
+        @keyframes chien-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        .boite p.consigne { font-size: 12.5px; }
+
+        /* États du chien */
+        .chien .ouvert, .chien .demi, .chien .grogne, .chien .bulle, .chien .sourcils { display: none; }
+        .chien.oeil1 .demi { display: inline; }
+        .chien.oeil1 .ferme-g { display: none; }
+        .chien.reveil .ferme, .chien.reveil .bouche-dort, .chien.reveil .zzz, .chien.oeil1 .zzz { display: none; }
+        .chien.reveil .ouvert, .chien.reveil .grogne, .chien.reveil .bulle, .chien.reveil .sourcils { display: inline; }
+
+        /* Il respire en dormant, les « z » montent, la queue s'agite réveillé. */
+        .chien .respire { transform-box: fill-box; transform-origin: 50% 100%; animation: respire 3.2s ease-in-out infinite; }
+        @keyframes respire { 50% { transform: scale(1.015, 1.035); } }
+        .chien.reveil .respire { animation: none; }
+        .chien .zzz text { animation: zzz 3s ease-in-out infinite; opacity: 0; }
+        .chien .zzz text:nth-child(2) { animation-delay: 0.6s; }
+        .chien .zzz text:nth-child(3) { animation-delay: 1.2s; }
+        @keyframes zzz { 0% { opacity: 0; transform: translateY(6px); } 30%, 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+        .chien .queue { transform-box: fill-box; transform-origin: 0% 60%; }
+        .chien.reveil .queue { animation: queue 0.25s ease-in-out infinite alternate; }
+        @keyframes queue { from { transform: rotate(-14deg); } to { transform: rotate(14deg); } }
+        .chien.saute .respire { animation: saute 0.5s ease-out; }
+        @keyframes saute { 40% { transform: translateY(-12px); } 100% { transform: none; } }
+        @media (prefers-reduced-motion: reduce) {
+            .chien, .chien .respire, .chien .zzz text, .chien.reveil .queue, .chien.saute .respire { animation: none; }
+            .chien .zzz text { opacity: 1; }
+            .barre-plein { transition: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="boite">
+        <h1>NESTOR</h1>
+        <div class="troll" id="troll" hidden>
+            <div class="dechiffrement" id="dechiffrement">
+                <p id="dechiffrement-texte">Déchiffrement en cours… 0 %</p>
+                <div class="barre"><div class="barre-plein" id="barre-plein"></div></div>
+            </div>
+            <svg class="chien" id="chien" hidden viewBox="0 -36 320 286" xmlns="http://www.w3.org/2000/svg" role="button" tabindex="0" aria-label="Un chien de garde dort sur le cadenas, la clé dans la gueule">
+                <defs>
+                    <clipPath id="c-tete"><path d="M140 60 C184 60 200 90 198 118 C196 148 172 164 140 164 C108 164 84 148 82 118 C80 90 96 60 140 60 Z"/></clipPath>
+                    <clipPath id="c-corps"><path d="M62 196 C60 160 94 146 140 146 C186 146 220 160 218 196 C216 220 190 228 140 228 C90 228 64 220 62 196 Z"/></clipPath>
+                    <radialGradient id="g-joue" cx="0.5" cy="0.5" r="0.5">
+                        <stop offset="0" stop-color="#f9a8b8" stop-opacity="0.55"/>
+                        <stop offset="1" stop-color="#f9a8b8" stop-opacity="0"/>
+                    </radialGradient>
+                </defs>
+                <ellipse cx="160" cy="232" rx="128" ry="10" fill="#000" opacity="0.25"/>
+                <!-- cadenas, derrière le chien -->
+                <path d="M200 112 V74 a36 36 0 0 1 72 0 V112" fill="none" stroke="#8b96a3" stroke-width="14" stroke-linecap="round"/>
+                <path d="M200 112 V74 a36 36 0 0 1 72 0" fill="none" stroke="#d6dde5" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+                <rect x="174" y="104" width="124" height="122" rx="20" fill="#e3a72f"/>
+                <rect x="174" y="104" width="124" height="20" rx="10" fill="#f7cc63"/>
+                <circle cx="256" cy="160" r="11" fill="#5a3d10"/>
+                <path d="M251 164 h10 l3 24 h-16 z" fill="#5a3d10"/>
+                <g class="respire">
+                    <!-- queue courte -->
+                    <g class="queue">
+                        <path d="M212 176 c10 -8 22 -6 24 2 c2 8 -8 14 -20 12 z" fill="#b9c3cd"/>
+                        <path d="M222 172 c8 -2 13 2 13 7 c-6 0 -10 -2 -13 -7 z" fill="#3a4049"/>
+                    </g>
+                    <!-- corps couché, robe bleu merle -->
+                    <path d="M62 196 C60 160 94 146 140 146 C186 146 220 160 218 196 C216 220 190 228 140 228 C90 228 64 220 62 196 Z" fill="#b9c3cd"/>
+                    <g clip-path="url(#c-corps)">
+                        <path d="M60 170 C72 158 92 160 98 174 C102 188 84 196 70 192 Z" fill="#3a4049"/>
+                        <path d="M182 152 C200 150 214 162 212 178 C200 182 186 176 180 166 Z" fill="#3a4049"/>
+                        <path d="M196 196 C206 192 216 198 214 210 C204 212 196 206 196 196 Z" fill="#7d8794"/>
+                        <path d="M78 206 C84 202 92 204 92 212 C86 216 80 214 78 206 Z" fill="#7d8794"/>
+                        <path d="M96 150 C110 176 170 176 184 150 C186 172 176 184 166 190 L158 184 L152 196 L144 188 L138 200 L132 188 L124 196 L120 184 L112 190 C102 184 94 172 96 150 Z" fill="#f8f7f4"/>
+                    </g>
+                    <g fill="#f8f7f4">
+                        <ellipse cx="110" cy="214" rx="22" ry="13"/>
+                        <ellipse cx="170" cy="214" rx="22" ry="13"/>
+                    </g>
+                    <g stroke="#cfc8bd" stroke-width="2" stroke-linecap="round">
+                        <path d="M103 219 v5 M111 220 v5 M119 219 v5"/>
+                        <path d="M163 219 v5 M171 220 v5 M179 219 v5"/>
+                    </g>
+                    <!-- oreilles repliées vers l'avant -->
+                    <path d="M90 98 C78 78 80 52 98 42 C114 46 126 64 124 86 Z" fill="#3a4049"/>
+                    <path d="M98 42 C84 44 74 56 74 72 C86 66 98 64 110 66 C110 56 106 46 98 42 Z" fill="#23272d"/>
+                    <path d="M190 98 C202 78 200 52 182 42 C166 46 154 64 156 86 Z" fill="#b9c3cd"/>
+                    <path d="M182 42 C196 44 206 56 206 72 C194 66 182 64 170 66 C170 56 174 46 182 42 Z" fill="#8b95a2"/>
+                    <path d="M90 112 L72 126 L88 128 L76 142 L94 138 L88 150 L104 140 Z" fill="#c3ccd5"/>
+                    <path d="M190 112 L208 126 L192 128 L204 142 L186 138 L192 150 L176 140 Z" fill="#c3ccd5"/>
+                    <path d="M84 132 L76 142 L94 138 Z" fill="#3a4049" opacity="0.9"/>
+                    <!-- tête -->
+                    <path d="M140 60 C184 60 200 90 198 118 C196 148 172 164 140 164 C108 164 84 148 82 118 C80 90 96 60 140 60 Z" fill="#c3ccd5"/>
+                    <g clip-path="url(#c-tete)">
+                        <path d="M78 70 C98 58 128 64 132 84 C134 102 118 112 102 108 C88 104 78 92 78 70 Z" fill="#3a4049"/>
+                        <path d="M160 64 C176 60 190 70 192 84 C182 88 168 84 162 76 Z" fill="#7d8794"/>
+                        <path d="M180 102 C188 100 196 106 196 114 C188 116 182 112 180 102 Z" fill="#3a4049"/>
+                        <path d="M150 70 C156 68 160 72 158 78 C152 78 150 76 150 70 Z" fill="#3a4049"/>
+                        <path d="M84 128 C90 126 94 132 90 138 C86 136 84 132 84 128 Z" fill="#7d8794"/>
+                    </g>
+                    <path d="M140 64 C134 78 132 94 134 106 C118 112 108 124 110 138 C114 160 166 160 170 138 C172 124 162 112 146 106 C148 94 146 78 140 64 Z" fill="#f8f7f4"/>
+                    <ellipse cx="116" cy="96" rx="6" ry="4" fill="#d08a47"/>
+                    <ellipse cx="164" cy="96" rx="6" ry="4" fill="#d08a47"/>
+                    <path d="M100 124 C104 118 112 120 112 128 C110 136 102 136 100 124 Z" fill="#d08a47"/>
+                    <path d="M180 124 C176 118 168 120 168 128 C170 136 178 136 180 124 Z" fill="#d08a47"/>
+                    <ellipse cx="104" cy="134" rx="13" ry="8" fill="url(#g-joue)"/>
+                    <ellipse cx="176" cy="134" rx="13" ry="8" fill="url(#g-joue)"/>
+                    <!-- yeux fermés, un œil entrouvert, yeux ouverts (un bleu, un marron) -->
+                    <g class="ferme" fill="none" stroke="#1e2228" stroke-width="3" stroke-linecap="round">
+                        <path class="ferme-g" d="M108 112 q9 7 18 0"/>
+                        <path d="M154 112 q9 7 18 0"/>
+                    </g>
+                    <g class="demi">
+                        <ellipse cx="117" cy="113" rx="8" ry="6" fill="#fff"/>
+                        <circle cx="118" cy="114" r="5" fill="#4f9be8"/>
+                        <circle cx="118" cy="114" r="2.6" fill="#0b0d10"/>
+                        <circle cx="119.6" cy="112.4" r="1.2" fill="#fff"/>
+                        <path d="M108 110 q9 -4 18 0" fill="none" stroke="#1e2228" stroke-width="3" stroke-linecap="round"/>
+                    </g>
+                    <g class="ouvert">
+                        <ellipse cx="117" cy="112" rx="9" ry="9.5" fill="#fff"/>
+                        <ellipse cx="163" cy="112" rx="9" ry="9.5" fill="#fff"/>
+                        <circle cx="118" cy="113" r="6.5" fill="#4f9be8"/>
+                        <circle cx="162" cy="113" r="6.5" fill="#7a4a22"/>
+                        <circle cx="118" cy="113" r="3.4" fill="#0b0d10"/>
+                        <circle cx="162" cy="113" r="3.4" fill="#0b0d10"/>
+                        <circle cx="120.5" cy="110.5" r="1.8" fill="#fff"/>
+                        <circle cx="164.5" cy="110.5" r="1.8" fill="#fff"/>
+                    </g>
+                    <g class="sourcils" stroke="#b86d2c" stroke-width="4" stroke-linecap="round">
+                        <path d="M106 97 l20 6"/>
+                        <path d="M174 97 l-20 6"/>
+                    </g>
+                    <!-- la clé dans la gueule -->
+                    <circle cx="98" cy="146" r="9" fill="none" stroke="#b7791f" stroke-width="7"/>
+                    <circle cx="98" cy="146" r="9" fill="none" stroke="#f7cc63" stroke-width="4"/>
+                    <rect x="106" y="143" width="82" height="6" rx="3" fill="#f7cc63" stroke="#b7791f" stroke-width="1.2"/>
+                    <path d="M176 149 v8 h5 v-8 M184 149 v6 h5 v-6" fill="#f7cc63" stroke="#b7791f" stroke-width="1.2"/>
+                    <path d="M131 124 C131 119 149 119 149 124 C149 130 143 133 140 133 C137 133 131 130 131 124 Z" fill="#1e2228"/>
+                    <ellipse cx="136" cy="122.5" rx="3" ry="1.6" fill="#fff" opacity="0.6"/>
+                    <path class="bouche-dort" d="M140 133 v4 M130 139 q5 5 10 1 q5 4 10 -1" fill="none" stroke="#1e2228" stroke-width="2.5" stroke-linecap="round"/>
+                    <g class="grogne">
+                        <path d="M140 133 v3 M127 141 q13 -6 26 0" fill="none" stroke="#1e2228" stroke-width="2.6" stroke-linecap="round"/>
+                        <path d="M131 140 l2.4 5 l2.4 -5 z M144 140 l2.4 5 l2.4 -5 z" fill="#fff" stroke="#1e2228" stroke-width="0.8"/>
+                    </g>
+                </g>
+                <g class="zzz" fill="#93c5fd" font-family="system-ui, sans-serif" font-weight="800">
+                    <text x="190" y="58" font-size="15">z</text>
+                    <text x="203" y="42" font-size="20">z</text>
+                    <text x="220" y="24" font-size="26">Z</text>
+                </g>
+                <g class="bulle">
+                    <rect id="bulle-fond" x="84" y="-32" width="112" height="40" rx="14" fill="#f8fafc"/>
+                    <path d="M130 6 l10 22 l10 -22 z" fill="#f8fafc"/>
+                    <text id="bulle-texte" x="140" y="-6" text-anchor="middle" font-family="system-ui, sans-serif" font-size="17" font-weight="700" fill="#0f172a">Grr… non.</text>
+                </g>
+            </svg>
+        </div>
+        <p id="message" role="status" aria-live="polite">Chargement…</p>
+    </div>
+    <script>
+    (function () {
+        'use strict';
+
+        // Site d'essai (dépôt « nestor-essai ») : mis à true par
+        // scripts/publier.ps1 -Essai. Sa clé est mémorisée sous un autre nom,
+        // et ses données restent à part du vrai NESTOR (isolerStockage).
+        var ESSAI = false;
+        var CLE_STOCKEE = ESSAI ? 'nestor_essai_cle' : 'nestor_site_cle';
+        if (ESSAI) {
+            document.title = 'NESTOR (essai)';
+            document.querySelector('h1').textContent = 'NESTOR · ESSAI';
+        }
+
+        // Hors ligne (sw.js, publié à côté de cette page) : garde en réserve
+        // dans le navigateur cette page et le dernier paquet chiffré, pour que
+        // NESTOR s'ouvre même sans réseau. Sans effet si le navigateur ne le
+        // permet pas (navigation privée, navigateur ancien).
+        if ('serviceWorker' in navigator) {
+            try { navigator.serviceWorker.register('sw.js').catch(function () {}); } catch (e) { /* non permis ici */ }
+        }
+
+        function message(texte) {
+            document.getElementById('message').textContent = texte;
+        }
+
+        function lireStockage() {
+            try { return localStorage.getItem(CLE_STOCKEE); } catch (e) { return null; }
+        }
+
+        function ecrireStockage(valeur) {
+            try {
+                if (valeur) localStorage.setItem(CLE_STOCKEE, valeur);
+                else localStorage.removeItem(CLE_STOCKEE);
+            } catch (e) { /* stockage indisponible : le lien complet restera nécessaire */ }
+        }
+
+        function base64urlVersOctets(s) {
+            s = s.replace(/-/g, '+').replace(/_/g, '/');
+            while (s.length % 4) s += '=';
+            var binaire = atob(s);
+            var octets = new Uint8Array(binaire.length);
+            for (var i = 0; i < binaire.length; i++) octets[i] = binaire.charCodeAt(i);
+            return octets;
+        }
+
+        // Ouvre le paquet : vérifie l'empreinte (HMAC) puis déchiffre et
+        // décompresse. Renvoie null si la clé ne correspond pas.
+        async function ouvrirPaquet(donnees, cle) {
+            var subtle = window.crypto.subtle;
+            var encodeur = new TextEncoder();
+            var maitre = await subtle.importKey('raw', base64urlVersOctets(cle), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+            var cleAes = await subtle.importKey('raw', await subtle.sign('HMAC', maitre, encodeur.encode('chiffrement')), { name: 'AES-CBC' }, false, ['decrypt']);
+            var cleMac = await subtle.importKey('raw', await subtle.sign('HMAC', maitre, encodeur.encode('authentification')), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+
+            var fin = donnees.length - 32;
+            var valide = await subtle.verify('HMAC', cleMac, donnees.slice(fin), donnees.slice(0, fin));
+            if (!valide) return null;
+
+            var clair = await subtle.decrypt({ name: 'AES-CBC', iv: donnees.slice(0, 16) }, cleAes, donnees.slice(16, fin));
+            var flux = new Blob([clair]).stream().pipeThrough(new DecompressionStream('gzip'));
+            return JSON.parse(await new Response(flux).text());
+        }
+
+        // Reconstitue la page de NESTOR à partir des fichiers du paquet : feuilles
+        // de style et scripts insérés tels quels, référentiel fourni d'avance.
+        // Les icônes (favicon.svg / .ico) restent des liens vers les fichiers
+        // publiés à côté de cette page.
+        // Site d'essai : même domaine github.io que le vrai NESTOR, donc même
+        // stockage du navigateur. Toutes ses clés sont préfixées : il ne lit ni
+        // ne modifie jamais les données, le code ou les réglages du vrai site.
+        function isolerStockage() {
+            var prefixe = 'nestor-essai:';
+            ['localStorage', 'sessionStorage'].forEach(function (nom) {
+                var reel;
+                try { reel = window[nom]; } catch (e) { return; }
+                if (!reel) return;
+                var cles = function () {
+                    var liste = [];
+                    for (var i = 0; i < reel.length; i++) {
+                        var k = reel.key(i);
+                        if (k && k.indexOf(prefixe) === 0) liste.push(k.slice(prefixe.length));
+                    }
+                    return liste;
+                };
+                var isole = {
+                    getItem: function (k) { return reel.getItem(prefixe + k); },
+                    setItem: function (k, v) { reel.setItem(prefixe + k, String(v)); },
+                    removeItem: function (k) { reel.removeItem(prefixe + k); },
+                    clear: function () { cles().forEach(function (k) { reel.removeItem(prefixe + k); }); },
+                    key: function (i) { var liste = cles(); return i < liste.length ? liste[i] : null; }
+                };
+                Object.defineProperty(isole, 'length', { get: function () { return cles().length; } });
+                Object.defineProperty(window, nom, { value: isole, configurable: true });
+            });
+            window.__NestorEssai = true;
+        }
+
+        function lancer(paquet) {
+            if (ESSAI) isolerStockage();
+            var fichiers = paquet.fichiers;
+            window.__NestorCatalogue = paquet.catalogue;
+            // Pages annexes du paquet, ouvertes dans un nouvel onglet par NESTOR
+            // (js/etiquettes-dvd.js).
+            window.__NestorPages = {};
+            Object.keys(fichiers).forEach(function (chemin) {
+                if (chemin !== 'index.html' && /\.html$/.test(chemin)) window.__NestorPages[chemin] = fichiers[chemin];
+            });
+            // La fenêtre est conservée par document.open() : ne pas laisser
+            // l'écouteur de la page d'accueil actif dans NESTOR.
+            window.removeEventListener('hashchange', surChangementLien);
+
+            // La barrière du navigateur (balise en tête de cette page) est
+            // recopiée en tête de NESTOR : elle reste en place quel que soit le
+            // navigateur après document.open().
+            var barriere = document.querySelector('meta[http-equiv="Content-Security-Policy"]');
+            var html = fichiers['index.html']
+                .replace(/<head>/i, function (balise) { return barriere ? balise + barriere.outerHTML : balise; })
+                .replace(/<link rel="stylesheet" href="([^"]+)">/g, function (balise, chemin) {
+                    return '<style>' + fichiers[chemin] + '</style>';
+                })
+                .replace(/<script src="([^"]+)" defer><\/script>/g, function (balise, chemin) {
+                    return '<script>' + fichiers[chemin].replace(/<\/script/gi, '<\\/script') + '<\/script>';
+                });
+
+            document.open();
+            document.write(html);
+            document.close();
+        }
+
+        async function demarrer() {
+            var dansLien = /(?:^#|&)cle=([A-Za-z0-9_-]{43})(?:&|$)/.exec(location.hash);
+            var cle = dansLien ? dansLien[1] : lireStockage();
+            if (!cle) {
+                // Sans clé du tout (pas une mauvaise clé) : le petit troll, et
+                // la vraie consigne en dessous pour un collègue qui aurait mal
+                // copié son lien.
+                message("Lien incomplet ? Utilisez le lien d'accès complet qui vous a été transmis.");
+                document.getElementById('message').className = 'consigne';
+                troll();
+                return;
+            }
+            if (!window.crypto || !window.crypto.subtle || typeof DecompressionStream === 'undefined') {
+                message('Navigateur trop ancien : utilisez Edge, Chrome ou Firefox à jour.');
+                return;
+            }
+
+            var version = await (await fetch('version.json', { cache: 'no-store' })).json();
+            var reponse = await fetch(version.paquet);
+            if (!reponse.ok) throw new Error('paquet introuvable');
+            var donnees = new Uint8Array(await reponse.arrayBuffer());
+
+            var paquet = await ouvrirPaquet(donnees, cle);
+            if (!paquet) {
+                ecrireStockage(null);
+                message("Ce lien n'est plus valable. Demandez le nouveau lien d'accès.");
+                return;
+            }
+
+            ecrireStockage(cle);
+            if (dansLien) history.replaceState(null, '', location.pathname + location.search);
+            lancer(paquet);
+        }
+
+        /* Le petit troll (validé le 16/11/2026) : fausse barre de
+         * déchiffrement qui cale à 99 %, puis le chien de garde. Il entrouvre
+         * un œil quand la souris bouge ; un clic le réveille et il répond,
+         * une réplique différente à chaque fois. Aucun son, rien d'envoyé. */
+        var REPLIQUES = ['Grr… non.', 'Toujours non.', 'C’est ma clé.', 'Je suis un chien, pas une porte.',
+            'Insister n’est pas une clé.', 'Ouaf !', 'Bien essayé.', 'Je ne dors que d’un œil.'];
+
+        function troll() {
+            var zone = document.getElementById('troll');
+            var texte = document.getElementById('dechiffrement-texte');
+            var plein = document.getElementById('barre-plein');
+            zone.hidden = false;
+            var etapes = [
+                [12, 'Déchiffrement en cours… 12 %', 700],
+                [47, 'Contournement du pare-feu… 47 %', 900],
+                [86, 'Presque… 86 %', 900],
+                [95, 'Presque… 95 %', 900],
+                [99, 'Encore un peu… 99 %', 1400]
+            ];
+            var i = 0;
+            (function suivante() {
+                if (i < etapes.length) {
+                    plein.style.width = etapes[i][0] + '%';
+                    texte.textContent = etapes[i][1];
+                    setTimeout(suivante, etapes[i++][2]);
+                    return;
+                }
+                texte.textContent = 'Bien essayé 😏';
+                texte.className = 'fini';
+                setTimeout(function () {
+                    document.getElementById('dechiffrement').hidden = true;
+                    reveillerChien();
+                }, 1500);
+            })();
+        }
+
+        function reveillerChien() {
+            var chien = document.getElementById('chien');
+            var bulle = document.getElementById('bulle-texte');
+            var fond = document.getElementById('bulle-fond');
+            var n = 0;
+            var minuterie = null;
+            chien.removeAttribute('hidden');   // élément SVG : pas de propriété « hidden »
+            var etat = function (classe) { chien.setAttribute('class', 'chien' + (classe ? ' ' + classe : '')); };
+            // La souris bouge : il entrouvre un œil, puis se rendort.
+            document.addEventListener('pointermove', function () {
+                if (/reveil/.test(chien.getAttribute('class'))) return;
+                etat('oeil1');
+                clearTimeout(minuterie);
+                minuterie = setTimeout(function () { etat(''); }, 1500);
+            });
+            var repondre = function () {
+                var r = REPLIQUES[n++ % REPLIQUES.length];
+                bulle.textContent = r;
+                etat('reveil' + (r === 'Ouaf !' ? ' saute' : ''));
+                var largeur = Math.max(80, Math.ceil(bulle.getComputedTextLength()) + 30);
+                fond.setAttribute('width', largeur);
+                fond.setAttribute('x', 140 - largeur / 2);
+                clearTimeout(minuterie);
+                minuterie = setTimeout(function () { etat(''); }, 2600);
+            };
+            chien.addEventListener('click', repondre);
+            chien.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); repondre(); }
+            });
+        }
+
+        // Lien collé dans un onglet déjà ouvert sur cette page : seule la
+        // partie après « # » change, sans rechargement. On repart de zéro.
+        function surChangementLien() { location.reload(); }
+        window.addEventListener('hashchange', surChangementLien);
+
+        demarrer().catch(function (erreur) {
+            message('Impossible de charger NESTOR (' + erreur.message + '). Vérifiez la connexion puis rechargez la page.');
+        });
+    })();
+    </script>
+</body>
+</html>
